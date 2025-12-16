@@ -1,0 +1,96 @@
+这里可以去搞那个房价预测，也可以做这个燃油效率和马力的关系图，但是反正这些本质上都是我们高中的拟合问题，还记得什么残差平方和，方均误差，什么最小二乘法，等等什么回归之类的
+流程依旧是 import-----下数据集-----数据预处理-----建坐标系------关系式拟合------预测评估-------呈现
+```python
+import pandas as pd
+import numpy as np
+import matplotlib.pyplot as plt
+from sklearn.model_selection import train_test_split
+from sklearn.linear_model import LinearRegression
+from sklearn.preprocessing import PolynomialFeatures  # 新增：多项式特征转换工具
+from sklearn.metrics import mean_squared_error, r2_score
+import seaborn as sns
+
+# 1. 下载并加载数据
+url = "http://archive.ics.uci.edu/ml/machine-learning-databases/auto-mpg/auto-mpg.data"
+column_names = ['MPG', 'Cylinders', 'Displacement', 'Horsepower', 'Weight',
+                'Acceleration', 'Model Year', 'Origin']
+raw_dataset = pd.read_csv(url, names=column_names,
+                          na_values='?', comment='\t',
+                          sep=" ", skipinitialspace=True)
+
+data = raw_dataset.copy()
+
+# 2. 数据清洗：处理缺失值
+print(f"原始数据缺失值总数:\n{data.isna().sum()}")
+data = data.dropna()
+print("--------------------")
+print(f"删除缺失值后数据量: {len(data)}")
+
+# 3. 准备特征 X 和标签 Y（与原代码一致）
+X = data['Horsepower'].values.reshape(-1, 1)  # 一维特征（马力）
+y = data['MPG'].values
+
+# 观察原始关系（与原代码一致）
+plt.figure(figsize=(10, 6))
+sns.scatterplot(x='Horsepower', y='MPG', data=data)
+plt.title('Horsepower vs. MPG')
+plt.xlabel('Horsepower (马力)')
+plt.ylabel('MPG (燃油效率)')
+plt.show()
+
+# --------------- 核心修改：多项式拟合部分 ---------------
+# 步骤1：设置多项式阶数（可修改为3、4等，这里用2阶示例）
+poly_degree = 2  
+# 步骤2：生成多项式特征（例如2阶会生成 [1, x, x²]）
+poly_features = PolynomialFeatures(degree=poly_degree, include_bias=False)
+
+# 步骤3：划分训练/测试集（先划分，再转换特征，避免数据泄露）
+X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
+# 对训练集/测试集分别做特征转换
+X_train_poly = poly_features.fit_transform(X_train)
+X_test_poly = poly_features.transform(X_test)
+
+print(f"训练集样本量: {len(X_train_poly)}")
+print(f"多项式特征维度: {X_train_poly.shape[1]}（{poly_degree}阶多项式）")
+
+# 步骤4：用线性回归拟合多项式特征（本质是“多项式回归 = 多项式特征 + 线性回归”）
+model = LinearRegression()
+model.fit(X_train_poly, y_train)  # 注意：这里传入的是转换后的多项式特征
+
+# 提取多项式模型参数（2阶模型公式：MPG = w1*Horsepower + w2*Horsepower² + b）
+w = model.coef_  # 权重（对应x、x²的系数）
+b = model.intercept_  # 偏置项
+print("--- 2阶多项式模型训练结果 ---")
+print(f"权重 (w1, w2): {[round(wi, 4) for wi in w]}")
+print(f"偏置 (b): {b:.4f}")
+print(f"模型公式: MPG = {w[0]:.4f}*Horsepower + {w[1]:.4f}*Horsepower² + {b:.4f}")
+
+# --------------- 预测与评估（适配多项式特征） ---------------
+y_pred = model.predict(X_test_poly)  # 用转换后的测试特征预测
+
+# 评估性能（与原代码一致）
+mse = mean_squared_error(y_test, y_pred)
+r2 = r2_score(y_test, y_pred)
+print(f"测试集均方误差 (MSE): {mse:.2f}")
+print(f"测试集 R^2 分数: {r2:.2f}")  # R²会比线性回归更接近1
+
+# --------------- 可视化多项式拟合曲线 ---------------
+plt.figure(figsize=(10, 6))
+sns.scatterplot(x='Horsepower', y='MPG', data=data, label='Actual Data Points')
+
+# 生成密集的x值，绘制平滑的多项式曲线
+x_range = np.linspace(X.min(), X.max(), 100).reshape(-1, 1)  # 覆盖所有马力范围
+x_range_poly = poly_features.transform(x_range)  # 转换为多项式特征
+y_range_pred = model.predict(x_range_poly)  # 预测多项式曲线
+
+plt.plot(x_range, y_range_pred, color='red', linewidth=3, 
+         label=f'{poly_degree}阶多项式拟合曲线')
+plt.title(f'{poly_degree}阶多项式拟合: Horsepower vs. MPG')
+plt.xlabel('Horsepower (马力)')
+plt.ylabel('MPG (燃油效率)')
+plt.legend()
+plt.show()
+```
+
+
+
